@@ -28,14 +28,35 @@ app.use(express.static("public"));
 
 // Connect to the Mongo DB
 // mongoose.connect("mongodb://localhost/mongoHeadlines", { useNewUrlParser: true });
+
+mongoose.Promise = global.Promise;
+
 var MONGODB_URI = process.env.MONGODB_URI || "mongodb://vanikari:Tamil1963@ds257564.mlab.com:57564/heroku_d27fmdfq";
 
 mongoose.connect(MONGODB_URI, { useNewUrlParser: true });
-// console.log(MONGODB_URI);
+console.log(MONGODB_URI);
+
 // Routes
+
+app.get("/clear", function(req, res) {
+
+    db.Article.remove({}, function(err) { 
+         console.log('Articles removed') ;
+     });
+    db.Note.remove({}, function(err) { 
+        console.log('Notes removed');
+    });
+ 
+});
 
 // A GET route for scraping the echoJS website
 app.get("/scrape", function(req, res) {
+
+   db.Article.remove({saved : false}, function(err) { 
+        console.log('Unsaved Articles removed') 
+    });
+ 
+
   // First, we grab the body of the html with axios
   axios.get("https://www.nytimes.com").then(function(response) {
     // Then, we load that into cheerio and save it to $ for a shorthand selector
@@ -45,7 +66,7 @@ app.get("/scrape", function(req, res) {
     $("article").each(function(i, element) {
       // Save an empty result object
       var result = {};
-        console.log(this);
+        // console.log(this);
       // Add the text and href of every link, and save them as properties of the result object
       result.title = $(this)
         .find("h2")
@@ -56,17 +77,16 @@ app.get("/scrape", function(req, res) {
       result.story = $(this)
         .find("p")
         .text();
-    
-      console.log(result);
+        
       // Create a new Article using the `result` object built from scraping
       db.Article.create(result)
         .then(function(dbArticle) {
           // View the added result in the console
-          console.log(dbArticle);
+        //   console.log(dbArticle);
         })
         .catch(function(err) {
           // If an error occurred, log it
-          console.log(err);
+        //   console.log(err);
         });
     });
 
@@ -78,7 +98,7 @@ app.get("/scrape", function(req, res) {
 // Route for getting all Articles from the db
 app.get("/articles", function(req, res) {
   // Grab every document in the Articles collection
-  db.Article.find({})
+  db.Article.find({saved:false})
     .then(function(dbArticle) {
       // If we were able to successfully find Articles, send them back to the client
       res.json(dbArticle);
@@ -105,6 +125,22 @@ app.get("/articles/:id", function(req, res) {
     });
 });
 
+// Route for saving a specific Article ID 
+app.get("/save/:id", function(req, res) {
+    // Using the id passed in the id parameter, prepare a query that finds the matching one in our db...
+    console.log('saving', req.params.id);
+    // console.log()
+    db.Article.updateOne({ _id: req.params.id },  {$set: {saved : true}})
+    .then( function(dbArticle) {
+        console.log(dbArticle);
+        res.json(dbArticle);
+    })
+    .catch(function(err) {
+        console.log('Error', err);
+        res.json(err);
+    });
+});
+
 // Route for saving/updating an Article's associated Note
 app.post("/articles/:id", function(req, res) {
   // Create a new note and pass the req.body to the entry
@@ -125,6 +161,19 @@ app.post("/articles/:id", function(req, res) {
     });
 });
 
+app.get("/saved", function(req, res) {
+    // Grab every document in the Articles collection
+    db.Article.find({saved: true})
+      .then(function(dbArticle) {
+        // If we were able to successfully find Articles, send them back to the client
+        res.json(dbArticle);
+      })
+      .catch(function(err) {
+        // If an error occurred, send it to the client
+        res.json(err);
+      });
+  });
+  
 // Start the server
 app.listen(PORT, function() {
   console.log("App running on port " + PORT + "!");
